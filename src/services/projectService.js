@@ -213,6 +213,11 @@ export const addContribution = async ({ projectId, backerId, amount }) => {
   if (!project) {
     return null;
   }
+  if (project.creator_id === backerId) {
+    const err = new Error("Project creators cannot contribute to their own projects.");
+    err.statusCode = 403;
+    throw err;
+  }
 
   const remaining = Math.max(Number(project.goal_amount) - Number(project.raised_amount), 0);
   if (safeAmount > remaining) {

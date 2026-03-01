@@ -15,8 +15,9 @@ export const env = {
   supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
   firebaseServiceAccountJson: process.env.FIREBASE_SERVICE_ACCOUNT_JSON ?? "",
   firebaseProjectId: process.env.FIREBASE_PROJECT_ID ?? "",
-  razorpayKeyId: process.env.RAZORPAY_KEY_ID ?? "",
-  razorpayKeySecret: process.env.RAZORPAY_KEY_SECRET ?? "",
+  cashfreeAppId: process.env.CASHFREE_APP_ID ?? "",
+  cashfreeSecretKey: process.env.CASHFREE_SECRET_KEY ?? "",
+  cashfreeEnvironment: process.env.CASHFREE_ENVIRONMENT ?? "SANDBOX",
 };
 
 export const assertEnv = () => {

@@ -2,16 +2,16 @@ import { Router } from "express";
 import {
   createMockIntentController,
   confirmMockPaymentController,
-  createRazorpayOrderController,
-  verifyRazorpayPaymentController,
+  createCashfreeOrderController,
+  verifyCashfreePaymentController,
 } from "../controllers/paymentController.js";
 import { authenticateFirebase } from "../middleware/authenticateFirebase.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 
 const router = Router();
 
-router.post("/razorpay/order", authenticateFirebase, asyncHandler(createRazorpayOrderController));
-router.post("/razorpay/verify", authenticateFirebase, asyncHandler(verifyRazorpayPaymentController));
+router.post("/cashfree/order", authenticateFirebase, asyncHandler(createCashfreeOrderController));
+router.post("/cashfree/verify", authenticateFirebase, asyncHandler(verifyCashfreePaymentController));
 
 router.post("/mock-intent", authenticateFirebase, asyncHandler(createMockIntentController));
 router.post("/mock-confirm", authenticateFirebase, asyncHandler(confirmMockPaymentController));

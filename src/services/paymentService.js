@@ -1,8 +1,10 @@
-import { supabase } from "../lib/supabase.js";
+import { Cashfree, CFEnvironment } from "cashfree-pg";
 import crypto from "crypto";
 import { env } from "../config/env.js";
+import { supabase } from "../lib/supabase.js";
 
-const razorpayOrders = new Map();
+const cashfreeOrders = new Map();
+let cashfreeClient = null;
 
 const getProjectForFunding = async (projectId) => {
   const { data: project, error } = await supabase
@@ -20,6 +22,23 @@ const getProjectForFunding = async (projectId) => {
   return project;
 };
 
+const configureCashfree = () => {
+  if (cashfreeClient) {
+    return cashfreeClient;
+  }
+
+  if (!env.cashfreeAppId || !env.cashfreeSecretKey) {
+    throw new Error("CASHFREE_APP_ID and CASHFREE_SECRET_KEY are required.");
+  }
+
+  const environment = String(env.cashfreeEnvironment).toUpperCase() === "PRODUCTION"
+      ? CFEnvironment.PRODUCTION
+      : CFEnvironment.SANDBOX;
+
+  cashfreeClient = new Cashfree(environment, env.cashfreeAppId, env.cashfreeSecretKey);
+  return cashfreeClient;
+};
+
 export const createMockPaymentIntent = async ({ projectId, backerId, amount }) => {
   const safeAmount = Number(amount);
   if (!Number.isFinite(safeAmount) || safeAmount <= 0) {
@@ -29,6 +48,11 @@ export const createMockPaymentIntent = async ({ projectId, backerId, amount }) =
   const project = await getProjectForFunding(projectId);
   if (!project) {
     return null;
+  }
+  if (project.creator_id === backerId) {
+    const err = new Error("Project creators cannot contribute to their own projects.");
+    err.statusCode = 403;
+    throw err;
   }
 
   const remaining = Math.max(Number(project.goal_amount) - Number(project.raised_amount), 0);
@@ -48,7 +72,7 @@ export const createMockPaymentIntent = async ({ projectId, backerId, amount }) =
     .single();
 
   if (error) {
-    throw new Error(`Failed to create mock payment intent: ${error.message}`);
+    throw new Error(`Failed to create payment intent: ${error.message}`);
   }
 
   return contribution;
@@ -144,59 +168,54 @@ const finalizeContribution = async ({ contributionId, backerId, simulate = "succ
   return markContributionSucceeded({ contribution, backerId });
 };
 
-const createDummyRazorpayOrderId = () => `order_${crypto.randomBytes(8).toString("hex")}`;
+const createDummyCashfreeOrderId = () => `order_${crypto.randomBytes(8).toString("hex")}`;
 
-export const createRazorpayOrder = async ({ projectId, backerId, amount }) => {
+export const createCashfreeOrder = async ({ projectId, backerId, amount }) => {
   const contribution = await createMockPaymentIntent({ projectId, backerId, amount });
   if (!contribution) {
     return null;
   }
 
-  const orderId = createDummyRazorpayOrderId();
-  razorpayOrders.set(orderId, { contributionId: contribution.id, backerId });
+  const cashfree = configureCashfree();
+
+  const orderId = createDummyCashfreeOrderId();
+  const sanitizedCustomerId = `user_${String(backerId).replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 24) || "guest"}`;
+
+  const request = {
+    order_id: orderId,
+    order_amount: Number(contribution.amount),
+    order_currency: "INR",
+    customer_details: {
+      customer_id: sanitizedCustomerId,
+      customer_phone: "9999999999",
+    },
+  };
+
+  const response = await cashfree.PGCreateOrder(request);
+  const data = response?.data ?? {};
+
+  cashfreeOrders.set(orderId, { contributionId: contribution.id, backerId });
+  if (data.cf_order_id && data.cf_order_id !== orderId) {
+    cashfreeOrders.set(data.cf_order_id, { contributionId: contribution.id, backerId });
+  }
 
   return {
     contributionId: contribution.id,
-    razorpayOrderId: orderId,
-    keyId: env.razorpayKeyId ?? "rzp_test_dummy",
+    cashfreeOrderId: data.order_id ?? orderId,
+    paymentSessionId: data.payment_session_id,
     amount: Number(contribution.amount),
     currency: "INR",
   };
 };
 
-export const verifyRazorpayPayment = async ({
-  razorpayOrderId,
-  razorpayPaymentId,
-  razorpaySignature,
-  backerId,
-  simulate = "success",
-}) => {
-  const order = razorpayOrders.get(razorpayOrderId);
+export const verifyCashfreePayment = async ({ cashfreeOrderId, backerId, simulate = "success" }) => {
+  const order = cashfreeOrders.get(cashfreeOrderId);
   if (!order || order.backerId !== backerId) {
     return null;
   }
 
   if (simulate !== "success" && simulate !== "failed") {
     throw new Error("Invalid simulate value. Use 'success' or 'failed'.");
-  }
-
-  if (simulate === "success") {
-    const hasLiveVerificationPayload = razorpayPaymentId && razorpaySignature;
-    if (hasLiveVerificationPayload) {
-      const keySecret = env.razorpayKeySecret;
-      if (!keySecret) {
-        throw new Error("RAZORPAY_KEY_SECRET is required for signature verification.");
-      }
-
-      const expected = crypto
-        .createHmac("sha256", keySecret)
-        .update(`${razorpayOrderId}|${razorpayPaymentId}`)
-        .digest("hex");
-
-      if (expected !== razorpaySignature) {
-        throw new Error("Invalid Razorpay signature.");
-      }
-    }
   }
 
   const result = await finalizeContribution({
@@ -206,7 +225,7 @@ export const verifyRazorpayPayment = async ({
   });
 
   if (result) {
-    razorpayOrders.delete(razorpayOrderId);
+    cashfreeOrders.delete(cashfreeOrderId);
   }
 
   return result;

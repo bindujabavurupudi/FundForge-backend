@@ -1,8 +1,8 @@
 import {
+  createCashfreeOrder,
   confirmMockPayment,
   createMockPaymentIntent,
-  createRazorpayOrder,
-  verifyRazorpayPayment,
+  verifyCashfreePayment,
 } from "../services/paymentService.js";
 import { upsertProfile } from "../services/profileService.js";
 
@@ -45,10 +45,10 @@ export const confirmMockPaymentController = async (req, res) => {
   return res.status(200).json({ ok: true, data: result });
 };
 
-export const createRazorpayOrderController = async (req, res) => {
+export const createCashfreeOrderController = async (req, res) => {
   await upsertProfile(req.user);
 
-  const order = await createRazorpayOrder({
+  const order = await createCashfreeOrder({
     projectId: req.body?.projectId,
     backerId: req.user.uid,
     amount: req.body?.amount,
@@ -61,19 +61,17 @@ export const createRazorpayOrderController = async (req, res) => {
   return res.status(201).json({ ok: true, data: order });
 };
 
-export const verifyRazorpayPaymentController = async (req, res) => {
+export const verifyCashfreePaymentController = async (req, res) => {
   await upsertProfile(req.user);
 
-  const result = await verifyRazorpayPayment({
-    razorpayOrderId: req.body?.razorpayOrderId,
-    razorpayPaymentId: req.body?.razorpayPaymentId,
-    razorpaySignature: req.body?.razorpaySignature,
+  const result = await verifyCashfreePayment({
+    cashfreeOrderId: req.body?.cashfreeOrderId,
     simulate: req.body?.simulate,
     backerId: req.user.uid,
   });
 
   if (!result) {
-    return res.status(404).json({ ok: false, error: "Razorpay order not found." });
+    return res.status(404).json({ ok: false, error: "Cashfree order not found." });
   }
 
   return res.status(200).json({ ok: true, data: result });
