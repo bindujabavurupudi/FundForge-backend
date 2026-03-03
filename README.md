@@ -3,7 +3,7 @@
 This is the backend API for **FundForge** — a crowdfunding platform.  
 It provides RESTful endpoints to manage projects, contributions, comments, updates, views, and user dashboards.
 
-The backend uses **Express.js**, integrates with **Firebase Authentication** for secure access, and uses **Supabase** (PostgreSQL) for data storage. :contentReference[oaicite:0]{index=0}
+The backend uses **Express.js**, integrates with **Firebase Authentication** for secure access, and uses **Supabase** (PostgreSQL) for data storage.
 
 ---
 
@@ -17,7 +17,6 @@ The backend uses **Express.js**, integrates with **Firebase Authentication** for
   - Contributions
   - Comments & Updates
   - Creator Dashboard
-  - Mock payment flows :contentReference[oaicite:1]{index=1}
 
 ---
 
