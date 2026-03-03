@@ -8,6 +8,14 @@ const allowedSortFields = {
 };
 
 const normalizeSort = (sort) => allowedSortFields[sort] ?? allowedSortFields.popular;
+const isProjectExpired = (deadline) => {
+  const deadlineDate = String(deadline ?? "").slice(0, 10);
+  if (!deadlineDate) {
+    return true;
+  }
+  const todayDate = new Date().toISOString().slice(0, 10);
+  return deadlineDate < todayDate;
+};
 
 export const listProjects = async ({
   search = "",
@@ -138,6 +146,78 @@ export const getProjectById = async (projectId) => {
   };
 };
 
+export const listProjectsByCreatorId = async ({ creatorId, creatorName, creatorEmail }) => {
+  const { data, error } = await supabase
+    .from("projects")
+    .select("*, creator:profiles!projects_creator_id_fkey(name)")
+    .eq("creator_id", creatorId)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw new Error(`Failed to fetch creator projects: ${error.message}`);
+  }
+
+  let items = data ?? [];
+
+  // Legacy compatibility: some older rows may not have creator_id populated with Firebase uid.
+  if (items.length === 0) {
+    const { data: legacyData, error: legacyError } = await supabase
+      .from("projects")
+      .select("*, creator:profiles!projects_creator_id_fkey(name)")
+      .order("created_at", { ascending: false })
+      .limit(500);
+
+    if (legacyError) {
+      throw new Error(`Failed to fetch legacy creator projects: ${legacyError.message}`);
+    }
+
+    const normalizedName = String(creatorName ?? "").trim().toLowerCase();
+    const normalizedEmail = String(creatorEmail ?? "").trim().toLowerCase();
+
+    items = (legacyData ?? []).filter((project) => {
+      if (project.creator_id === creatorId) {
+        return true;
+      }
+      const projectCreatorName = String(project.creator?.name ?? project.creator_name ?? "")
+        .trim()
+        .toLowerCase();
+      const projectCreatorEmail = String(project.creator_email ?? "").trim().toLowerCase();
+      return Boolean(
+        (normalizedName && projectCreatorName === normalizedName) ||
+          (normalizedEmail && projectCreatorEmail === normalizedEmail),
+      );
+    });
+  }
+
+  const projectIds = items.map((project) => project.id);
+
+  if (projectIds.length === 0) {
+    return { items: [] };
+  }
+
+  const { data: viewRows, error: viewsError } = await supabase
+    .from("project_views")
+    .select("project_id")
+    .in("project_id", projectIds);
+
+  if (viewsError) {
+    throw new Error(`Failed to fetch creator project views: ${viewsError.message}`);
+  }
+
+  const viewsByProjectId = (viewRows ?? []).reduce((acc, row) => {
+    const key = row.project_id;
+    acc[key] = (acc[key] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  return {
+    items: items.map((project) => ({
+      ...project,
+      views: viewsByProjectId[project.id] ?? 0,
+    })),
+  };
+};
+
 export const createProject = async ({ creatorId, payload }) => {
   const projectPayload = {
     title: payload.title?.trim(),
@@ -215,6 +295,11 @@ export const addContribution = async ({ projectId, backerId, amount }) => {
   }
   if (project.creator_id === backerId) {
     const err = new Error("Project creators cannot contribute to their own projects.");
+    err.statusCode = 403;
+    throw err;
+  }
+  if (isProjectExpired(project.deadline)) {
+    const err = new Error("Project is expired and no longer accepts contributions.");
     err.statusCode = 403;
     throw err;
   }

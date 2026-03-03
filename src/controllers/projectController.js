@@ -5,6 +5,7 @@ import {
   addProjectUpdate,
   createProject,
   getProjectById,
+  listProjectsByCreatorId,
   listProjects,
   upsertProjectView,
 } from "../services/projectService.js";
@@ -21,6 +22,15 @@ export const getProjectByIdController = async (req, res) => {
     return res.status(404).json({ ok: false, error: "Project not found." });
   }
   return res.json({ ok: true, data: project });
+};
+
+export const listMyProjectsController = async (req, res) => {
+  const result = await listProjectsByCreatorId({
+    creatorId: req.user.uid,
+    creatorName: req.user.name,
+    creatorEmail: req.user.email,
+  });
+  res.json({ ok: true, data: result });
 };
 
 export const createProjectController = async (req, res) => {

@@ -6,6 +6,15 @@ import { supabase } from "../lib/supabase.js";
 const cashfreeOrders = new Map();
 let cashfreeClient = null;
 
+const isProjectExpired = (deadline) => {
+  const deadlineDate = String(deadline ?? "").slice(0, 10);
+  if (!deadlineDate) {
+    return true;
+  }
+  const todayDate = new Date().toISOString().slice(0, 10);
+  return deadlineDate < todayDate;
+};
+
 const getProjectForFunding = async (projectId) => {
   const { data: project, error } = await supabase
     .from("projects")
@@ -54,6 +63,11 @@ export const createMockPaymentIntent = async ({ projectId, backerId, amount }) =
     err.statusCode = 403;
     throw err;
   }
+  if (isProjectExpired(project.deadline)) {
+    const err = new Error("Project is expired and no longer accepts contributions.");
+    err.statusCode = 403;
+    throw err;
+  }
 
   const remaining = Math.max(Number(project.goal_amount) - Number(project.raised_amount), 0);
   if (safeAmount > remaining) {
@@ -95,6 +109,9 @@ const markContributionSucceeded = async ({ contribution, backerId }) => {
   const project = await getProjectForFunding(contribution.project_id);
   if (!project) {
     throw new Error("Project not found for contribution.");
+  }
+  if (isProjectExpired(project.deadline)) {
+    return markContributionFailed(contribution.id);
   }
 
   const remaining = Math.max(Number(project.goal_amount) - Number(project.raised_amount), 0);

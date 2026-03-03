@@ -6,6 +6,7 @@ import {
   addProjectUpdateController,
   createProjectController,
   getProjectByIdController,
+  listMyProjectsController,
   listProjectsController,
   trackProjectViewController,
 } from "../controllers/projectController.js";
@@ -15,6 +16,8 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 const router = Router();
 
 router.get("/", asyncHandler(listProjectsController));
+router.get("/my", authenticateFirebase, asyncHandler(listMyProjectsController));
+router.get("/me", authenticateFirebase, asyncHandler(listMyProjectsController));
 router.get("/:projectId", asyncHandler(getProjectByIdController));
 
 router.post("/", authenticateFirebase, asyncHandler(createProjectController));
